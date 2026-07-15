@@ -1,0 +1,15 @@
+name: neurosym-calc
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.13
+  - pip
+  - pip:
+      - sympy>=1.13
+      - pandas>=2.2
+      - python-dotenv>=1.0
+      - aiohttp>=3.9
+      - chromadb>=0.5
+      - statsmodels>=0.14
+      - scipy>=1.13
+      - numpy>=1.26
