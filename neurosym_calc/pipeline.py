@@ -82,6 +82,7 @@ class EvaluationPipeline:
         )
 
         async with semaphore:
+            logger.debug(f"[{model_cfg.name}] Starting problem: {problem.domain}/{problem.rule}")
             messages: list[ChatMessage] = engine.build_initial_messages(problem.problem_str)
             ledger_record_id: str | None = None
 
@@ -178,6 +179,9 @@ class EvaluationPipeline:
         )
         semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
 
+        total_tasks = len(self.config.models) * len(problems)
+        logger.info(f"Starting evaluation: {total_tasks} total tasks ({len(problems)} problems × {len(self.config.models)} model(s))")
+
         connector = aiohttp.TCPConnector(limit=self.config.max_concurrent_requests)
         async with aiohttp.ClientSession(connector=connector) as session:
             engine = InferenceEngine(self.config, session)
@@ -186,9 +190,15 @@ class EvaluationPipeline:
                 for model_cfg in self.config.models
                 for problem in problems
             ]
-            outcomes: list[ProblemOutcome] = await asyncio.gather(
-                *tasks, return_exceptions=False
-            )
+            
+            # Use as_completed to show progress as tasks finish
+            outcomes: list[ProblemOutcome] = []
+            completed = 0
+            for coro in asyncio.as_completed(tasks):
+                outcome = await coro
+                outcomes.append(outcome)
+                completed += 1
+                logger.info(f"Progress: {completed}/{total_tasks} tasks completed ({100*completed//total_tasks}%)")
 
         self.last_outcomes = outcomes
         return self._to_dataframe(outcomes)

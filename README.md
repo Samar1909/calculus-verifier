@@ -193,10 +193,32 @@ p = 0.50, n = 20.
   together, and produce results in the direction you'd expect (derivative
   ≫ integral difficulty; self-correction ≥ 0).
 
-To get a statistically meaningful answer on whether the feedback loop
-helps, rerun with a much larger `--num-problems` (expect roughly
-1–2 minutes/problem on this CPU-only local setup, so budget runtime
-accordingly), and/or compare against a larger model.
+Scaled-up run (GPU-accelerated): `qwen2.5:3b-instruct` (GPU-accelerated,
+locally-hosted via Ollama), 100 generated problems, seed 42, 2 reprompt rounds,
+4 concurrent requests.
+
+| Domain | n | Initial accuracy | Final accuracy | Self-correction rate | Avg. rounds |
+|---|---|---|---|---|---|
+| derivative | 53 | 69.8% | 69.8% | 0.0% | 1.60 |
+| integral | 47 | 42.6% | 44.7% | 2.1% | 2.13 |
+
+McNemar's test (initial vs. final correctness, pooled): stat = 0.000,
+p = 1.00, n = 100.
+
+**Interpretation of scaled-up run:**
+
+- **Self-correction effect is minimal at this sample size.** Unlike the
+  smaller pilot run (where p = 0.5 due to lack of power), the larger n = 100
+  run with p = 1.0 suggests the feedback loop may not be having a meaningful
+  effect on overall accuracy in this configuration. This contrasts with the
+  pilot's qualitative observation of a handful of problems self-correcting.
+- **Derivatives remain substantially easier than integrals** (69.8% vs. 42.6%
+  initial), consistent with the pilot and the structural difficulty difference
+  between forward and inverse calculus operations.
+- **GPU acceleration made the 100-problem run tractable:** with 4 concurrent
+  requests on a GPU, the entire batch completed in ~5 minutes
+  (vs. the estimated 100–200 minutes on CPU), enabling larger-sample evaluation
+  without prohibitive wall-clock time.
 
 ## Project layout
 
@@ -226,6 +248,7 @@ neurosym_calc/
   [verifier.py](neurosym_calc/verifier.py) respectively) because SymPy
   can pathologically hang on certain inputs — this trades a small amount
   of missed-but-solvable cases for guaranteed forward progress.
-- Local (Ollama) inference is CPU-only in this setup and single-request
-  concurrency, so large `--num-problems` runs are slow (minutes, not
-  seconds) compared to a hosted API.
+- Local (Ollama) inference performance depends on hardware: CPU-only setups
+  require single-request concurrency (slow); GPU acceleration (e.g. NVIDIA
+  with CUDA) supports higher concurrency (4–8 concurrent requests), making
+  large batches feasible. Set `--max-concurrent-requests` accordingly.

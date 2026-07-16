@@ -51,11 +51,10 @@ class PipelineConfig:
     max_reprompt_rounds: int = 2
 
     # Concurrency / rate limiting
-    # Local Ollama serves one request at a time (`-np 1`), so higher
-    # concurrency just queues requests behind each other and times them
-    # out; CPU-only generation is also much slower than a hosted API.
-    max_concurrent_requests: int = 1
-    request_timeout_s: float = 300.0
+    # With GPU acceleration, we can handle multiple concurrent requests.
+    # Set to 1 for CPU-only, increase to 4-8 for GPU with sufficient VRAM.
+    max_concurrent_requests: int = 4
+    request_timeout_s: float = 60.0  # GPU should be much faster than CPU
     max_retries: int = 4
     backoff_base_s: float = 1.5
 
