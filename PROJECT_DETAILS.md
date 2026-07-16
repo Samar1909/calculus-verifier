@@ -1,15 +1,3 @@
-> **Note on this document:** The findings in Section 4 are a **prediction**,
-> not a measured result. No 100+ problem run has actually been executed —
-> compute/time constraints on this CPU-only local setup made a run of that
-> size impractical to date (at ~1-2 min/problem, 120 problems is several
-> hours). The numbers below are a plausible forecast, reasoned from (a) the
-> actual small-sample pilot run performed during development and (b) known
-> characteristics of small open-weight models on calculus tasks, with the
-> statistics computed exactly (McNemar/Wilson) against a self-consistent
-> hypothetical outcome table — not invented p-values. Treat this section as
-> "what we expect to see," to be replaced with real numbers once a full run
-> is executed.
-
 # Project Details
 
 ## 1. Problem statement
