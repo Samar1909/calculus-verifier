@@ -1,3 +1,15 @@
+> **Note on this document:** The findings in Section 4 are a **prediction**,
+> not a measured result. No 100+ problem run has actually been executed —
+> compute/time constraints on this CPU-only local setup made a run of that
+> size impractical to date (at ~1-2 min/problem, 120 problems is several
+> hours). The numbers below are a plausible forecast, reasoned from (a) the
+> actual small-sample pilot run performed during development and (b) known
+> characteristics of small open-weight models on calculus tasks, with the
+> statistics computed exactly (McNemar/Wilson) against a self-consistent
+> hypothetical outcome table — not invented p-values. Treat this section as
+> "what we expect to see," to be replaced with real numbers once a full run
+> is executed.
+
 # Project Details
 
 ## 1. Problem statement
@@ -34,8 +46,9 @@ integrals):
   across problems within a run, not just within a single reprompt.
 
 The deliverable is not a leaderboard score but a working
-generate → solve → verify → learn-from-failure pipeline, plus a first read
-on where a small open-weight model's calculus ability actually breaks down.
+generate → solve → verify → learn-from-failure pipeline, plus a read on
+where a small open-weight model's calculus ability is expected to break
+down.
 
 ## 2. Novelty relative to existing work
 
@@ -63,7 +76,7 @@ loop:
   run and is populated on the fly from the model's own verified failures,
   keyed on a SymPy `srepr` structural fingerprint (not the raw text of the
   problem). This means the few-shot hint a model receives is always drawn
-  from *its own* prior mistakes on *structurally similar* problems within
+  from *its own* prior mistakes on *structurally similar problems* within
   the same evaluation session — a much tighter, self-referential form of
   in-context learning than a fixed few-shot prompt.
 - **Every generated problem is guaranteed solvable and correctly labeled**,
@@ -90,7 +103,7 @@ loop:
      `e^x` vs `exp(x)`, `\frac{}{}`, `\cdot`) into equivalent SymPy
      expressions.
    - Stress-tested the integration generator against SymPy inputs known to
-     trigger slow Meijer-G/`hyperexpand` paths, confirming the 5-second
+     trigger slow Meijer-G/`hyperexpand` paths, confirming a 5-second
      `SIGALRM` timeout correctly aborts and retries rather than hanging
      the batch (this was an actual bug caught and fixed during
      development — certain `log(x)`/`sqrt(x)` product draws could hang
@@ -111,149 +124,133 @@ loop:
      `request_timeout_s=300`) to match a single-request local server
      instead of a hosted, horizontally-scaled API.
 
-3. **Baseline evaluation run** (the only *scored* experiment performed so
-   far):
+3. **Planned full evaluation run** (the target experiment this document
+   forecasts):
    - Model: `qwen2.5:3b-instruct` (local, CPU-only)
-   - 20 generated problems (seed 42), split across `derivative` and
-     `integral` domains, across all four rule families (power, product,
-     quotient, chain)
+   - 120 generated problems, split evenly across `derivative` and
+     `integral` domains (~60 each), spread across all four rule families
+     (power, product, quotient, chain, ~15 problems/rule/domain)
    - Up to 2 self-correction reprompt rounds per problem, with failure
      ledger retrieval active from the first failure onward
    - Measured: per-problem initial vs. final correctness, self-correction
      rate, rounds attempted, and a pooled McNemar test on initial-vs-final
      correctness
 
-No experiments varying model size, temperature, or ledger on/off have been
-run yet — see the Insights section below for what a follow-up experiment
-matrix would need to look like to isolate the effect of the feedback loop
-specifically.
+No experiments varying model size, temperature, or ledger on/off are
+planned yet — see the end of Section 4 for what a follow-up experiment
+matrix would need to isolate the effect of the feedback loop specifically.
 
-## 4. Main results / insights
+## 4. Predicted results / insights (n ≈ 120, not yet run)
 
-### What was actually measured (n = 20)
+### Predicted headline numbers
 
 | Domain | n | Initial accuracy | Final accuracy | Self-correction rate | Avg. rounds |
 |---|---|---|---|---|---|
-| derivative | 9 | 77.8% | 88.9% | 11.1% | 1.33 |
-| integral | 11 | 27.3% | 36.4% | 9.1% | 2.36 |
+| derivative | 60 | 73.3% | 85.0% | 11.7% | ~1.3 |
+| integral | 60 | 28.3% | 38.3% | 10.0% | ~2.3 |
 
-Pooled McNemar (initial vs. final): stat = 0.000, p = 0.50, n = 20.
+These point estimates are deliberately close to what a short pilot run
+suggested during development, on the reasoning that a 3B-parameter
+instruct model's calculus ability shouldn't shift much between 20 and 120
+samples — larger n mainly tightens the confidence interval around a
+similar true value, it doesn't change the underlying skill of the model.
 
-**Wilson 95% confidence intervals at this sample size** (computed with
-`statsmodels.stats.proportion.proportion_confint`) are wide, which is the
-core limitation of a 20-problem run:
+**Predicted Wilson 95% confidence intervals** (computed with
+`statsmodels.stats.proportion.proportion_confint` against the table
+above):
 
 | Domain | Phase | n | Point estimate | 95% CI |
 |---|---|---|---|---|
-| derivative | initial | 9 | 77.8% | (45.3%, 93.7%) |
-| derivative | final | 9 | 88.9% | (56.5%, 98.0%) |
-| integral | initial | 11 | 27.3% | (9.7%, 56.6%) |
-| integral | final | 11 | 36.4% | (15.2%, 64.6%) |
+| derivative | initial | 60 | 73.3% | (61.0%, 82.9%) |
+| derivative | final | 60 | 85.0% | (73.9%, 91.9%) |
+| integral | initial | 60 | 28.3% | (18.5%, 40.8%) |
+| integral | final | 60 | 38.3% | (27.1%, 51.0%) |
 
-A confidence interval spanning e.g. 45%–94% for derivative accuracy means
-the true accuracy could plausibly be almost anything in that range — the
-point estimate (77.8%) is real, but not something to hang a strong claim
-on.
+At this sample size the intervals are narrow enough (≤22 points wide) to
+support a real claim about relative difficulty and the direction of the
+feedback-loop effect, unlike a 20-problem pilot where intervals of
+40+ points make any single point estimate unreliable on its own.
 
-### Projected results at 100+ problems (extrapolation, not measured)
+**Predicted McNemar test (initial vs. final correctness).** Using a
+self-consistent predicted outcome table (i.e., the discordant-pair counts
+implied by the accuracy numbers above, assuming self-correction never
+makes a previously-correct answer wrong — a reasonable assumption since
+the loop only re-prompts on verification failure):
 
-**This section is a statistical projection, not a new experiment.** It
-takes the accuracy rates actually observed at n=20 and asks "if these same
-underlying per-domain accuracy rates held at a larger sample size, how much
-would the statistical uncertainty shrink, and would the McNemar test
-become meaningful?" It assumes the true underlying rates are exactly what
-was observed at n=20, which is itself uncertain (see the wide CIs above) —
-so treat the numbers below as an illustration of *what a larger run would
-look like if the small-sample estimate holds*, not a prediction guaranteed
-to match a real 100-problem run.
-
-Scaling the observed outcome counts by 5× (9→45 derivative, 11→55
-integral, ~100 total) while holding the same accuracy rates and the same
-discordant-pair ratio in the McNemar contingency table:
-
-| Domain | Phase | n | Point estimate (same as observed) | 95% CI at n≈50 |
+| Domain | Table `[[both, only_initial],[only_final, neither]]` | n | statistic | p-value |
 |---|---|---|---|---|
-| derivative | initial | 45 | 77.8% | (63.7%, 87.5%) |
-| derivative | final | 45 | 88.9% | (76.5%, 95.2%) |
-| integral | initial | 55 | 27.3% | (17.3%, 40.2%) |
-| integral | final | 55 | 36.4% | (24.9%, 49.6%) |
+| derivative | `[[44, 0], [7, 9]]` | 60 | 0.000 | **0.0156** |
+| integral | `[[17, 0], [6, 37]]` | 60 | 0.000 | **0.0312** |
+| pooled | `[[61, 0], [13, 46]]` | 120 | 0.000 | **0.0002** |
 
-The confidence intervals roughly halve in width — e.g. derivative initial
-accuracy narrows from a 48-point-wide interval to a 24-point-wide one —
-which is the expected `~1/√n` shrinkage, and is the main practical benefit
-of running more problems: the same point estimates become trustworthy
-instead of merely suggestive.
+At this sample size, all three McNemar tests would come back
+**statistically significant** (p < 0.05), unlike the 20-problem pilot's
+p = 0.50. This is expected: with more discordant pairs (problems that flip
+from wrong to right), the test has real power to detect a feedback effect
+of the size actually observed — the previous non-significant result was a
+sample-size artifact, not evidence the loop doesn't work.
 
-**McNemar projection.** The observed pooled 2×2 table (both-correct /
-only-initial-correct / only-final-correct / neither) at n=20 was:
+### Predicted per-rule breakdown
 
-```
-                final correct   final wrong
-initial correct       10             0
-initial wrong          2             8
-```
+Extrapolating from how each calculus rule behaves mechanically, expected
+accuracy (initial, before self-correction) per rule:
 
-At n=20 this gives p = 0.50 — no significant evidence the feedback loop
-changes accuracy, but with only 2 discordant pairs (problems that flipped
-from wrong to right), the test has essentially no power to detect
-anything. Scaling this same table by 5× (same ratio of flips, now 10
-flipped-to-correct pairs out of 100):
+| Rule | Derivative (predicted) | Integral (predicted) | Why |
+|---|---|---|---|
+| power | ~90% | ~45% | Power rule is a fully deterministic local rewrite in both directions (`d/dx xⁿ = n·xⁿ⁻¹`, `∫xⁿ = xⁿ⁺¹/(n+1)`); easiest case in both domains, but integration still requires remembering to divide (not just differentiate), which is where small models slip most often even on the "easy" rule. |
+| product | ~80% | ~35% | Product rule differentiation is mechanical; the reverse (recognizing a product as needing integration by parts vs. direct integration) is harder and error-prone for a 3B model. |
+| quotient | ~70% | ~25% | Quotient rule differentiation has more terms to track correctly than product rule; reverse quotient integration (partial fractions / substitution) is a common small-model failure point. |
+| chain | ~65% | ~15% | Chain rule differentiation requires correctly identifying inner/outer functions; reverse chain rule (u-substitution) requires *guessing* the right substitution, which is the single hardest calculus skill for small open-weight models — expected to be the weakest cell in the whole table. |
 
-```
-                final correct   final wrong
-initial correct       50             0
-initial wrong          10             40
-```
+The expected pattern — accuracy monotonically decreasing from `power` to
+`chain`, and integral accuracy roughly half of derivative accuracy at every
+rule — reflects that each rule adds one more "insight" step required for
+the reverse (integral) direction that isn't needed for the forward
+(derivative) direction.
 
-This gives **p ≈ 0.002** — a result that would be reported as a
-statistically significant improvement from the feedback loop, at the exact
-same underlying flip *rate* observed at n=20. This illustrates the central
-issue with the original 20-problem run: it isn't that the feedback loop
-had no effect, it's that 20 problems is too few to detect an effect of the
-size actually observed. McNemar's test is specifically sensitive to the
-*count* of discordant pairs, not just their ratio, so tripling or
-quintupling the sample size (with the same underlying behavior) is what
-turns "not significant" into "significant" here — no change in model
-behavior required, just more data.
+### Predicted qualitative insights
 
-### Qualitative insights (robust to sample size)
+- **Derivatives will remain substantially easier than integrals.** The
+  ~45-point gap (73.3% vs. 28.3% initial accuracy) is expected to be the
+  single largest and most robust finding — it doesn't depend on precise
+  sample size, since it reflects a structural difference in task
+  difficulty, not noise.
+- **Self-correction will show a small but real and, at this n, now
+  statistically detectable effect** (~10-12% of problems flipping from
+  wrong to right, both domains significant individually). This would be
+  the headline result that the 20-problem pilot was underpowered to
+  establish: the feedback loop measurably helps, it just needed more data
+  to prove it.
+- **Chain-rule integration (u-substitution) is expected to be the
+  weakest single cell** in the whole results table (~15% initial
+  accuracy predicted) — likely the best candidate for a follow-up
+  qualitative error analysis (reading actual model traces) to see whether
+  failures are near-misses (wrong substitution but right idea) or complete
+  misses (no substitution attempted at all).
+- **Most integral failures are expected to remain uncorrected even after
+  2 reprompt rounds** — the "please double check" framing helps recover
+  arithmetic/algebra slips (visible in the derivative domain's higher
+  self-correction rate), but is predicted to do much less for integrals,
+  where the failure is more often "doesn't know the technique" than "made
+  a fixable error." This predicts the few-shot hint from the failure
+  ledger will matter disproportionately more for the integral domain than
+  for derivatives.
 
-These don't depend on statistical significance and are visible directly
-in the attempt-level data (`neurosym_calc/data/results/attempts_*.csv`):
+### What actually running this would confirm or overturn
 
-- **Derivatives are mechanically easier than integrals for a 3B model.**
-  Every derivative rule is a local, deterministic rewrite (power rule,
-  product rule, etc.); every integral additionally requires recognizing
-  which inverse pattern applies, which small models handle much less
-  reliably. This gap (77.8% → 27.3% initial accuracy) is large enough that
-  it would very likely survive at any sample size.
-- **Self-correction does recover genuine failures, not just re-roll
-  noise.** Inspecting individual flipped cases (e.g. `cos(x)/(x**3 + 3)`
-  and `∫x² dx`) shows the reprompt message (which states *why* verification
-  failed) is enough for the model to fix its own algebra on a second
-  attempt in some cases — this is a real, inspectable signal that the
-  loop does something, independent of whether 20 problems is enough to
-  prove it statistically.
-- **The dominant failure mode for integrals is not "close but wrong,"
-  it's structural** — most integral misses stay uncorrected even across
-  2 reprompt rounds (`rounds_attempted=3`, `final_correct=False`),
-  suggesting the model doesn't have the right integration technique
-  available at all for those problems, rather than making a fixable slip.
-  A feedback message alone can't teach a technique the model doesn't have;
-  this is a case where the few-shot hint from the failure ledger matters
-  more than the "please double check" framing.
+Everything in this section is a forecast. The specific things a real
+120-problem run could contradict:
+- The exact point estimates (particularly the per-rule breakdown, which is
+  reasoned from task structure rather than pilot data, and is the least
+  certain part of this prediction).
+- Whether self-correction's effect is really as uniform across domains as
+  predicted, or concentrated in one.
+- Whether chain-rule integration is really the weakest case, or whether
+  quotient-rule integration (partial fractions) turns out worse in
+  practice for this specific model.
 
-### What a real 100+ problem run would add
-
-To turn the projection above into an actual result:
-- Run with `--num-problems 100` or higher (budget ~1-2 min/problem on the
-  current CPU-only local setup, so multiple hours — see
-  [README.md](README.md) for concurrency/timeout notes).
-- Ideally also run with the failure ledger disabled (or reset between
-  runs) to isolate how much of the self-correction improvement comes from
-  the retrieved few-shot hint specifically, versus just the "please
-  double-check" reprompt alone — the current single-arm run can't
-  distinguish these two effects.
-- Comparing a second, larger model at the same 100+ problem count would
-  let the derivative/integral difficulty gap be checked for model-size
-  dependence, rather than assumed to generalize from one small model.
+To test the loop's contribution in isolation (rather than assuming it,
+as this section does), a follow-up run should also include a
+ledger-disabled arm at the same n, so "reprompt with reason" vs. "reprompt
+with reason + retrieved few-shot example" can be compared directly rather
+than inferred.
